@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gestura - Partículas Mágicas</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #050505;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        #bg-video {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            object-fit: cover;
+            z-index: -1;
+            opacity: 0.3; /* Subtle background */
+            filter: blur(8px) brightness(0.8);
+        }
+        #ui {
+            position: absolute;
+            top: 5vh;
+            left: 5vw;
+            color: white;
+            z-index: 10;
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+            pointer-events: none;
+            max-width: 90vw;
+        }
+        h1 {
+            margin: 0;
+            font-size: clamp(1.5rem, 4vw, 2.5rem);
+            font-weight: 300;
+            letter-spacing: 2px;
+        }
+        #shape-text {
+            font-size: clamp(1rem, 3vw, 1.5rem);
+            color: #00f2fe;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <img id="bg-video" alt="Camera Feed">
+    <div id="ui">
+        <h1>✨ Gestura</h1>
+        <div id="shape-text">Iniciando Servidor de Visión...</div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
