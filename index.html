@@ -3,56 +3,199 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Gestura - Partículas Mágicas</title>
+    <title>Gestura - Dibuja con tus manos</title>
+    <meta name="description" content="Dibuja formas geométricas en el aire con tu mano y observa cómo 10,000 partículas mágicas cobran vida. Powered by MediaPipe.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
+        *, *::before, *::after {
             margin: 0;
             padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #050505;
             overflow: hidden;
-            background-color: #050505;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Inter', 'Segoe UI', sans-serif;
+            color: white;
         }
-        #bg-video {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            object-fit: cover;
-            z-index: -1;
-            opacity: 0.3; /* Subtle background */
-            filter: blur(8px) brightness(0.8);
+
+        /* Camera feed with landmarks drawn on it (behind Three.js) */
+        #landmark-canvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            opacity: 0.32;
+            transform: scaleX(-1); /* Mirror for selfie view */
+            filter: blur(6px) brightness(0.75);
+            pointer-events: none;
+            z-index: 0;
         }
+
+        /* Three.js canvas sits on top */
+        canvas:not(#landmark-canvas) {
+            position: fixed;
+            top: 0; left: 0;
+            z-index: 1;
+        }
+
+        /* UI panel */
         #ui {
-            position: absolute;
+            position: fixed;
             top: 5vh;
             left: 5vw;
-            color: white;
             z-index: 10;
             text-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
             pointer-events: none;
             max-width: 90vw;
         }
+
         h1 {
             margin: 0;
             font-size: clamp(1.5rem, 4vw, 2.5rem);
             font-weight: 300;
-            letter-spacing: 2px;
+            letter-spacing: 3px;
+            background: linear-gradient(135deg, #ffffff, #00f2fe);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
+
         #shape-text {
-            font-size: clamp(1rem, 3vw, 1.5rem);
+            font-size: clamp(0.9rem, 2.5vw, 1.4rem);
             color: #00f2fe;
             margin-top: 10px;
+            font-weight: 400;
+            letter-spacing: 0.05em;
+            transition: color 0.4s ease;
+        }
+
+        #hand-state-badge {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 3px 10px;
+            border-radius: 99px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            font-size: 0.72rem;
+            color: rgba(255,255,255,0.5);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        /* Hint bar at the bottom */
+        #hint {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            font-size: 0.75rem;
+            color: rgba(255, 255, 255, 0.35);
+            letter-spacing: 0.12em;
+            text-align: center;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        /* Loading overlay */
+        #loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: #050505;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            transition: opacity 0.6s ease;
+        }
+
+        #loading-overlay.fade-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .loader-title {
+            font-size: clamp(2rem, 6vw, 3.5rem);
+            font-weight: 700;
+            letter-spacing: 6px;
+            background: linear-gradient(135deg, #00f2fe, #4facfe, #f5576c);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 12px;
+        }
+
+        .loader-subtitle {
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 0.95rem;
+            margin-bottom: 40px;
+            letter-spacing: 0.05em;
+        }
+
+        .loader-bar {
+            width: 220px;
+            height: 2px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 99px;
+            overflow: hidden;
+        }
+
+        .loader-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #00f2fe, #4facfe, #f5576c);
+            border-radius: 99px;
+            transition: width 0.4s ease;
+        }
+
+        .loader-error {
+            color: #f5576c;
+            font-size: 0.85rem;
+            margin-top: 20px;
+            text-align: center;
+            max-width: 320px;
+            display: none;
         }
     </style>
 </head>
 <body>
-    <img id="bg-video" alt="Camera Feed">
+
+    <!-- Loading overlay -->
+    <div id="loading-overlay">
+        <div class="loader-title">GESTURA</div>
+        <div class="loader-subtitle">Cargando modelo de detección de manos...</div>
+        <div class="loader-bar">
+            <div class="loader-bar-fill" id="loader-fill"></div>
+        </div>
+        <div class="loader-error" id="loader-error"></div>
+    </div>
+
+    <!-- Camera feed canvas (behind everything) -->
+    <canvas id="landmark-canvas"></canvas>
+
+    <!-- Hidden video for camera input -->
+    <video id="input-video" style="display:none;" playsinline autoplay muted></video>
+
+    <!-- UI overlay -->
     <div id="ui">
         <h1>✨ Gestura</h1>
-        <div id="shape-text">Iniciando Servidor de Visión...</div>
+        <div id="shape-text">Iniciando cámara...</div>
+        <div id="hand-state-badge">—</div>
     </div>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="main.js"></script>
+
+    <!-- Hint bar -->
+    <div id="hint">
+        PELLIZCA para dibujar &nbsp;·&nbsp; MANO ABIERTA para mover &nbsp;·&nbsp; PUÑO para absorber
+    </div>
+
+    <!-- Three.js (global) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+
+    <!-- Main app as ES module (needed for MediaPipe import) -->
+    <script type="module" src="main.js"></script>
+
 </body>
 </html>
