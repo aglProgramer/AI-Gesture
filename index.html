@@ -4,15 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Gestura - Dibuja con tus manos</title>
-    <meta name="description" content="Dibuja formas geométricas en el aire con tu mano y observa cómo 10,000 partículas mágicas cobran vida. Powered by MediaPipe.">
+    <meta name="description" content="Dibuja formas en el aire con tu mano y mira cómo 10,000 partículas mágicas cobran vida. Sin servidor, funciona en el browser.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <style>
-        *, *::before, *::after {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             background: #050505;
@@ -21,79 +17,104 @@
             color: white;
         }
 
-        /* Camera feed with landmarks drawn on it (behind Three.js) */
-        #landmark-canvas {
+        /* LAYER 0 – Camera feed with hand skeleton (blurred bg) */
+        #camera-canvas {
             position: fixed;
             top: 0; left: 0;
             width: 100%; height: 100%;
             opacity: 0.32;
-            transform: scaleX(-1); /* Mirror for selfie view */
-            filter: blur(6px) brightness(0.75);
+            filter: blur(5px) brightness(0.7);
             pointer-events: none;
             z-index: 0;
         }
 
-        /* Three.js canvas sits on top */
-        canvas:not(#landmark-canvas) {
+        /* LAYER 1 – Drawing trail (crisp, fully visible) */
+        #trail-canvas {
             position: fixed;
             top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
             z-index: 1;
         }
 
-        /* UI panel */
+        /* LAYER 2 – Three.js canvas (injected by script) */
+        #threejs-canvas {
+            position: fixed !important;
+            top: 0 !important; left: 0 !important;
+            z-index: 2 !important;
+        }
+
+        /* LAYER 3 – UI */
         #ui {
             position: fixed;
-            top: 5vh;
-            left: 5vw;
+            top: 5vh; left: 5vw;
             z-index: 10;
-            text-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
             pointer-events: none;
             max-width: 90vw;
         }
 
         h1 {
-            margin: 0;
-            font-size: clamp(1.5rem, 4vw, 2.5rem);
+            font-size: clamp(1.4rem, 3.5vw, 2.5rem);
             font-weight: 300;
-            letter-spacing: 3px;
+            letter-spacing: 4px;
             background: linear-gradient(135deg, #ffffff, #00f2fe);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            text-shadow: none;
         }
 
         #shape-text {
-            font-size: clamp(0.9rem, 2.5vw, 1.4rem);
+            font-size: clamp(0.9rem, 2.2vw, 1.3rem);
             color: #00f2fe;
             margin-top: 10px;
             font-weight: 400;
             letter-spacing: 0.05em;
+            text-shadow: 0 0 12px rgba(0, 200, 255, 0.8);
             transition: color 0.4s ease;
         }
 
         #hand-state-badge {
             display: inline-block;
             margin-top: 8px;
-            padding: 3px 10px;
+            padding: 3px 12px;
             border-radius: 99px;
-            background: rgba(255,255,255,0.08);
-            border: 1px solid rgba(255,255,255,0.15);
+            background: rgba(255,255,255,0.07);
+            border: 1px solid rgba(255,255,255,0.12);
             font-size: 0.72rem;
-            color: rgba(255,255,255,0.5);
+            color: rgba(255,255,255,0.45);
             letter-spacing: 0.1em;
-            text-transform: uppercase;
         }
 
-        /* Hint bar at the bottom */
+        /* Debug panel (shows pinch distance and points count) */
+        #debug-panel {
+            position: fixed;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.55);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            padding: 5px 14px;
+            font-size: 0.68rem;
+            color: rgba(255,255,255,0.45);
+            z-index: 10;
+            pointer-events: none;
+            font-family: 'Courier New', monospace;
+            letter-spacing: 0.06em;
+            white-space: nowrap;
+        }
+
+        /* Hint bar */
         #hint {
             position: fixed;
-            bottom: 24px;
+            bottom: 22px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 10;
-            font-size: 0.75rem;
-            color: rgba(255, 255, 255, 0.35);
-            letter-spacing: 0.12em;
+            font-size: 0.68rem;
+            color: rgba(255,255,255,0.28);
+            letter-spacing: 0.14em;
             text-align: center;
             pointer-events: none;
             white-space: nowrap;
@@ -118,27 +139,28 @@
         }
 
         .loader-title {
-            font-size: clamp(2rem, 6vw, 3.5rem);
+            font-size: clamp(2rem, 7vw, 4rem);
             font-weight: 700;
-            letter-spacing: 6px;
+            letter-spacing: 8px;
             background: linear-gradient(135deg, #00f2fe, #4facfe, #f5576c);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
-            margin-bottom: 12px;
+            margin-bottom: 14px;
         }
 
-        .loader-subtitle {
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 0.95rem;
-            margin-bottom: 40px;
+        #loader-subtitle {
+            color: rgba(255,255,255,0.38);
+            font-size: 0.9rem;
+            margin-bottom: 36px;
             letter-spacing: 0.05em;
+            transition: color 0.3s;
         }
 
         .loader-bar {
-            width: 220px;
+            width: 240px;
             height: 2px;
-            background: rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.07);
             border-radius: 99px;
             overflow: hidden;
         }
@@ -148,15 +170,16 @@
             width: 0%;
             background: linear-gradient(90deg, #00f2fe, #4facfe, #f5576c);
             border-radius: 99px;
-            transition: width 0.4s ease;
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
-        .loader-error {
+        #loader-error {
             color: #f5576c;
-            font-size: 0.85rem;
-            margin-top: 20px;
+            font-size: 0.82rem;
+            margin-top: 22px;
             text-align: center;
-            max-width: 320px;
+            max-width: 360px;
+            line-height: 1.6;
             display: none;
         }
     </style>
@@ -166,35 +189,37 @@
     <!-- Loading overlay -->
     <div id="loading-overlay">
         <div class="loader-title">GESTURA</div>
-        <div class="loader-subtitle">Cargando modelo de detección de manos...</div>
+        <div id="loader-subtitle">Cargando modelo de detección de manos...</div>
         <div class="loader-bar">
             <div class="loader-bar-fill" id="loader-fill"></div>
         </div>
-        <div class="loader-error" id="loader-error"></div>
+        <div id="loader-error"></div>
     </div>
 
-    <!-- Camera feed canvas (behind everything) -->
-    <canvas id="landmark-canvas"></canvas>
+    <!-- Canvas layers -->
+    <canvas id="camera-canvas"></canvas>
+    <canvas id="trail-canvas"></canvas>
 
-    <!-- Hidden video for camera input -->
+    <!-- Hidden camera input -->
     <video id="input-video" style="display:none;" playsinline autoplay muted></video>
 
     <!-- UI overlay -->
     <div id="ui">
         <h1>✨ Gestura</h1>
-        <div id="shape-text">Iniciando cámara...</div>
+        <div id="shape-text">Iniciando...</div>
         <div id="hand-state-badge">—</div>
     </div>
 
-    <!-- Hint bar -->
-    <div id="hint">
-        PELLIZCA para dibujar &nbsp;·&nbsp; MANO ABIERTA para mover &nbsp;·&nbsp; PUÑO para absorber
-    </div>
+    <!-- Debug panel -->
+    <div id="debug-panel">Esperando cámara...</div>
 
-    <!-- Three.js (global) -->
+    <!-- Hint bar -->
+    <div id="hint">PELLIZCA para dibujar &nbsp;·&nbsp; MANO ABIERTA para mover &nbsp;·&nbsp; PUÑO para absorber</div>
+
+    <!-- Three.js (loaded as global before the module) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
 
-    <!-- Main app as ES module (needed for MediaPipe import) -->
+    <!-- Main app as ES module (required for MediaPipe dynamic import) -->
     <script type="module" src="main.js"></script>
 
 </body>
